@@ -13,6 +13,7 @@ using System.Text;
 using System.IO;
 using iText.Svg.Converter;
 using System;
+using SudokuGraphicCreator.BookletLayout.IO;
 
 namespace SudokuGraphicCreator.IO
 {
@@ -95,9 +96,9 @@ namespace SudokuGraphicCreator.IO
                 _boldFont = PdfFontFactory.CreateFont("freesansbold.ttf", PdfEncodings.IDENTITY_H);
                 _font = PdfFontFactory.CreateFont("freesans.ttf", PdfEncodings.IDENTITY_H);
             }
-            catch
+            catch (Exception ex)
             {
-                throw new Exception("Error in export of booklet.");
+                throw new Exception("Error in export of booklet.", ex);
             }
             ExportPdf(name);
         }
@@ -108,25 +109,27 @@ namespace SudokuGraphicCreator.IO
             PdfDocument pdf = new PdfDocument(writer);
             pdf.SetDefaultPageSize(PageSize.A4.Rotate());
             Document document = new Document(pdf);
-            AddInformationsIntoBooklet(pdf, document);
+            AddInformationsIntoBooklet(document);
 
             document.Close();
             writer.Close();
         }
 
-        private void AddInformationsIntoBooklet(PdfDocument pdf, Document document)
+        private void AddInformationsIntoBooklet(Document document)
         {
-            CreateIntroPage(pdf, document);
+            CreateIntroPage(document);
 
             for (int i = 0; i < _booklet.Pages.Count; i++)
             {
-                FillPage(document, pdf, i + 2);
+                FillPage(document, i + 2);
             }
         }
 
-        private void CreateIntroPage(PdfDocument pdf, Document document)
+        private void CreateIntroPage(Document document)
         {
-            pdf.AddNewPage(new PageSize(PageSize.A4));
+            var pdf = document.GetPdfDocument();
+
+            var pdfPAge = pdf.AddNewPage(new PageSize(PageSize.A4));
             PlaceLogo(document, _booklet.LogoOneFullPath, FirstLogoLeft, FirstLogoBottom, LogoSize);
             PlaceLogo(document, _booklet.LogoTwoFullPath, SecondLogoLeft, SecondLogoBottom, LogoSize);
             PlaceLogo(document, _booklet.LogoThreeFullPath, ThirdLogoLeft, ThirdLogoBottom, LogoSize);
@@ -201,97 +204,48 @@ namespace SudokuGraphicCreator.IO
 
         private void PlaceLogo(Document document, string path, float left, float bottom, float size)
         {
-            if (path == null || path == "")
+            if (string.IsNullOrWhiteSpace(path))
             {
                 return;
             }
-            PlaceImage(document, path, 1, left, bottom, size);
+
+            // Also needs <code>paragraph.SetMargin(10 * OneUnitIText);</code>
+            PdfExportHelper.InsertImage(document, path, 1, left, bottom, size, size);
         }
 
-        private static void PlaceImage(Document document, string path, int pageNumber, float left, float bottom, float size)
+        private void FillPage(Document document, int pageNumber)
         {
-            try
+            var bookletPageSudokus = _booklet.Pages[pageNumber - 2].SudokuOnPage;
+
+            if (bookletPageSudokus.Count >= 1)
             {
-                ImageData imageData = ImageDataFactory.Create(path);
-                Image sudokuImage = new Image(imageData)
-                    .SetHeight(size)
-                    .SetWidth(size)
-                    .SetFixedPosition(pageNumber, left, bottom);
-                Paragraph imageParagraph = new Paragraph()
-                    .Add(sudokuImage)
-                    .SetMargin(10 * OneUnitIText);
-                document.Add(imageParagraph);
-            }
-            catch
-            {
-                throw new Exception("Cant export image on path: " + path);
+                InsertSudoku(document, bookletPageSudokus[0], true, pageNumber);
+
+                if (bookletPageSudokus.Count >= 2)
+                {
+                    InsertSudoku(document, bookletPageSudokus[1], false, pageNumber);
+                }
             }
         }
 
-        private void FillPage(Document document, PdfDocument pdfDocument, int pageNumber)
+        private void InsertSudoku(Document document, SudokuInBooklet sudokuInBooklet, bool isFirst, int pageNumber)
         {
-            InsertFirstSudoku(document, pdfDocument, pageNumber);
+            var gridLeftMargin = isFirst ? FirstGridLeftMargin : SecondGridLeftmargin;
 
-            if (_booklet.Pages[pageNumber - 2].SudokuOnPage.Count > 1)
-            {
-                InsertSecondSudoku(document, pdfDocument, pageNumber);
-            }
-        }
+            var rulesBottom = RulesBottom;
+            var nameBottom = SudokuNameBottom;
+            var textLeft = (TextLeftWithoutMargin + gridLeftMargin) * OneUnitIText;
+            var textWidth = TextWidth;
 
-        private void InsertFirstSudoku(Document document, PdfDocument pdfDocument, int pageNumber)
-        {
-            if (_booklet.Pages[pageNumber - 2].SudokuOnPage.Count == 0)
-            {
-                return;
-            }
-            SudokuInBooklet firstSudoku = _booklet.Pages[pageNumber - 2].SudokuOnPage[0];
+            var hasOutsideClues = HasOutsideClues(sudokuInBooklet);
 
-            float previous = SudokuTableSizeIText;
-            
-            InsertRules(document, firstSudoku, pageNumber, (TextLeftWithoutMargin + FirstGridLeftMargin) * OneUnitIText, RulesBottom, TextWidth);
-            InsertSudokuName(document, firstSudoku, pageNumber, (TextLeftWithoutMargin + FirstGridLeftMargin) * OneUnitIText, SudokuNameBottom, TextWidth);
-            //InsertSudokuGridIntoDocument(document, pdfDocument, firstSudoku, pageNumber, (ImageLeftWithoutMargin + FirstGridLeftMargin) * OneUnitIText, ImageBottom);
-            if (firstSudoku.Name.Contains(Resources.SudokuOutside) || Resources.SudokuOutside.Contains(firstSudoku.Name) ||
-                firstSudoku.Name.Contains(Resources.SudokuSkyscrapers) || Resources.SudokuSkyscrapers.Contains(firstSudoku.Name) ||
-                firstSudoku.Name.Contains(Resources.SudokuNextToNine) || Resources.SudokuNextToNine.Contains(firstSudoku.Name) ||
-                firstSudoku.Name.Contains(Resources.SudokuLittleKiller) || Resources.SudokuLittleKiller.Contains(firstSudoku.Name))
-            {
-                SudokuTableSizeIText += (20 * OneUnitIText);
-                InsertSudokuGridIntoDocument(document, pdfDocument, firstSudoku, pageNumber, (ImageLeftWithoutMargin + FirstGridLeftMargin - 10) * OneUnitIText,
-                    ImageBottom - 10);
-            }
-            else
-            {
-                InsertSudokuGridIntoDocument(document, pdfDocument, firstSudoku, pageNumber, (ImageLeftWithoutMargin + FirstGridLeftMargin) * OneUnitIText, ImageBottom);
-            }
+            var tableLeft = (ImageLeftWithoutMargin + gridLeftMargin) * OneUnitIText + (hasOutsideClues ? -10 * OneUnitIText : 0);
+            var tableBottom = ImageBottom + (hasOutsideClues ? -10 * OneUnitIText : 0);
+            var tableSize = SudokuTableSizeIText + (hasOutsideClues ? 20 * OneUnitIText : 0);
 
-            SudokuTableSizeIText = previous;
-        }
-
-        private void InsertSecondSudoku(Document document, PdfDocument pdfDocument, int pageNumber)
-        {
-            SudokuInBooklet secondSudoku = _booklet.Pages[pageNumber - 2].SudokuOnPage[1];
-
-            float previous = SudokuTableSizeIText;
-
-            InsertRules(document, secondSudoku, pageNumber, (TextLeftWithoutMargin + SecondGridLeftmargin) * OneUnitIText, RulesBottom, TextWidth);
-            InsertSudokuName(document, secondSudoku, pageNumber, (TextLeftWithoutMargin + SecondGridLeftmargin) * OneUnitIText, SudokuNameBottom, TextWidth);
-            //InsertSudokuGridIntoDocument(document, pdfDocument, secondSudoku, pageNumber, (ImageLeftWithoutMargin + SecondGridLeftmargin) * OneUnitIText, ImageBottom);
-
-            if (secondSudoku.Name.Contains(Resources.SudokuOutside) || Resources.SudokuOutside.Contains(secondSudoku.Name) ||
-                secondSudoku.Name.Contains(Resources.SudokuSkyscrapers) || Resources.SudokuSkyscrapers.Contains(secondSudoku.Name) ||
-                secondSudoku.Name.Contains(Resources.SudokuNextToNine) || Resources.SudokuNextToNine.Contains(secondSudoku.Name) ||
-                secondSudoku.Name.Contains(Resources.SudokuLittleKiller) || Resources.SudokuLittleKiller.Contains(secondSudoku.Name))
-            {
-                SudokuTableSizeIText += (20 * OneUnitIText);
-                InsertSudokuGridIntoDocument(document, pdfDocument, secondSudoku, pageNumber, (ImageLeftWithoutMargin + SecondGridLeftmargin - 10) * OneUnitIText,
-                    ImageBottom - 10);
-            }
-            else
-            {
-                InsertSudokuGridIntoDocument(document, pdfDocument, secondSudoku, pageNumber, (ImageLeftWithoutMargin + SecondGridLeftmargin) * OneUnitIText, ImageBottom);
-            }
-            SudokuTableSizeIText = previous;
+            InsertRules(document, sudokuInBooklet, pageNumber, textLeft, rulesBottom, textWidth);
+            InsertSudokuName(document, sudokuInBooklet, pageNumber, textLeft, nameBottom, textWidth);
+            PdfExportHelper.InsertImage(document, sudokuInBooklet.TableFullPath, pageNumber, tableLeft, tableBottom, tableSize, tableSize);
         }
 
         private void InsertSudokuName(Document document, SudokuInBooklet sudoku, int pageNumber, float left, float bottom, float width)
@@ -313,52 +267,13 @@ namespace SudokuGraphicCreator.IO
                     .SetTextAlignment(TextAlignment.JUSTIFIED));
         }
 
-        private void InsertSudokuGridIntoDocument(Document document, PdfDocument pdfDocument, SudokuInBooklet sudoku, int pageNumber, float left, float bottom)
+        private static bool HasOutsideClues(SudokuInBooklet sudoku)
         {
-            try
-            {
-                if (sudoku.TableFullPath.EndsWith(".svg"))
-                {
-                    PlaceSvgImage(document, pdfDocument, sudoku.TableFullPath, pageNumber, left, bottom);
-                    return;
-                }
-
-                PlaceImage(document, sudoku, pageNumber, left, bottom);
-            }
-            catch
-            {
-                throw new Exception("Cannot export image with path: " + sudoku.TableFullPath);
-            }
-        }
-
-        private static void PlaceSvgImage(Document document, PdfDocument pdfDoc, string path, int pageNumber, float left, float bottom)
-        {
-            using (Stream stream = File.Open(path, FileMode.Open))
-            {
-                Image img = SvgConverter.ConvertToImage(stream, pdfDoc);
-                img.SetFixedPosition(pageNumber, left, bottom)
-                    .ScaleAbsolute(SudokuTableSizeIText, SudokuTableSizeIText);
-                document.Add(img);
-            }
-        }
-
-        private static void PlaceImage(Document document, SudokuInBooklet sudoku, int pageNumber, float left, float bottom)
-        {
-            try
-            {
-                ImageData imageData = ImageDataFactory.Create(sudoku.TableFullPath);
-                Image sudokuImage = new Image(imageData)
-                    .SetHeight(SudokuTableSizeIText)
-                    .SetWidth(SudokuTableSizeIText)
-                    .SetFixedPosition(pageNumber, left, bottom);
-                Paragraph imageParagraph = new Paragraph()
-                    .Add(sudokuImage);
-                document.Add(imageParagraph);
-            }
-            catch
-            {
-                throw new Exception("Cannot export image with path: " + sudoku.TableFullPath);
-            }
+            var sudokuName = sudoku.Name;
+            return sudokuName.Contains(Resources.SudokuOutside) || Resources.SudokuOutside.Contains(sudokuName) ||
+                   sudokuName.Contains(Resources.SudokuSkyscrapers) || Resources.SudokuSkyscrapers.Contains(sudokuName) ||
+                   sudokuName.Contains(Resources.SudokuNextToNine) || Resources.SudokuNextToNine.Contains(sudokuName) ||
+                   sudokuName.Contains(Resources.SudokuLittleKiller) || Resources.SudokuLittleKiller.Contains(sudokuName);
         }
     }
 }

@@ -48,4 +48,9 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="BookletLayout\ViewModel\" />
+    <Folder Include="BookletLayout\View\" />
+  </ItemGroup>
+
 </Project>
