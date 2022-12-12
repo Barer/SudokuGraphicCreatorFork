@@ -22,6 +22,28 @@ namespace SudokuGraphicCreator.BookletLayout.IO
     public static class PdfExportHelper
     {
         /// <summary>
+        /// Places paragraph to PDF document.
+        /// </summary>
+        /// <param name="document">Document</param>
+        /// <param name="text">Paragraph text.</param>
+        /// <param name="font">Text font.</param>
+        /// <param name="textAlignment">Text alignment.</param>
+        /// <param name="fontSize">Text font size.</param>
+        /// <param name="pageNumber">Number of page where the paragraph is being inserted.</param>
+        /// <param name="left">Position of paragraph from left.</param>
+        /// <param name="bottom">Position of paragraph from bottom.</param>
+        /// <param name="width">Width of paragraph.</param>
+        public static void InsertParagraph(Document document, string text, PdfFont font, float fontSize, TextAlignment textAlignment, int pageNumber, float left, float bottom, float width)
+        {
+            var paragraph = new Paragraph(text)
+                .SetFont(font)
+                .SetFontSize(fontSize)
+                .SetTextAlignment(textAlignment)
+                .SetFixedPosition(pageNumber, left, bottom, width);
+            document.Add(paragraph);
+        }
+
+        /// <summary>
         /// Places image to PDF document.
         /// </summary>
         /// <inheritdoc cref="InsertImageDelegate" />
